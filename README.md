@@ -16,36 +16,75 @@
 
 ---
 
-Ask your training coach from Discord, with your laptop closed:
+## Features
+
+[Intervals.icu](https://intervals.icu) is where my workouts sync (Garmin, Zwift, Wahoo) and where my training calendar lives. This bot lets me use it from a private Discord channel on my phone, with an AI coach in between.
+
+### Talk to the coach
 
 ```
 /coach analyse today's ride
 /coach move Friday's ride to Saturday     → Coach proposes → tap ✅ Confirm → done
 /coach I'm home next week                 → Coach updates its memory: "📌 Saved: …"
 /coach chart my CTL for the last 3 months → the chart as an image
-/report type:Weekly                       → a Montis report, long ones as a file
-/plan tomorrow                            → instant, straight from Intervals
-/status                                   → instant: load, last night, ride weather
+/report type:Weekly                       → a weekly / season / wellness report, long ones as a file
 ```
 
-After a workout syncs, an "Intervals" post asks how it felt: one tap saves it, and "📝 RPE + note" opens a pop-up. Sending that pop-up (or `/feedback` for an activity from today or yesterday) starts the coach's analysis of the activity with your feedback; it posts a "🔍" reply about a minute later. Runs also get a "🦵 Pain" button, for when you want to report pain; nothing asks about it. A pain report sent after the analysis gets a short follow-up. When three of your last five sessions went badly, the coach says so and proposes a change or asks you about it.
+- **Ask anything in plain language**, in English or Dutch: how a workout went, whether I'm tired, what to do this week. The coach pulls live data from Intervals before it answers.
+- **Calendar changes with a confirm button.** The coach proposes a concrete change ("move the Z2 ride to Saturday, 1h30 indoors"). It only writes to the calendar after I tap ✅ Confirm, and the change then shows up on Zwift, Wahoo and Garmin automatically.
+- **It remembers.** When my situation changes (a home week, a new goal, an injury), the coach updates its own memory file and commits it to git. Every run reads that file, so a follow-up a week later still has the context.
+- **Charts and reports.** It draws charts (fitness, HR trends) as images and posts longer reports as files.
 
-Every coach run gets a "Training history" block worked out by the Worker:
-- how fresh the data is (a Garmin sync gap shows as "missing", not as old numbers);
-- this morning's check-in;
-- two decisions the coach must follow:
-  - the **Ladder gate**: your run/walk level and whether the next run may advance, must hold or drops a level;
-  - the **Plan check**: the next 14 days against your hard rules;
-- plan vs actual for the last 7 days;
-- your longest recent run and its +10% line, the running time of your last runs;
-- your notes and pain reports;
-- comparable indoor Z2 rides, HRV and resting HR against their usual range, and data problems.
+### Quick answers, no AI needed
 
-It only reads Intervals' numbers: no scores of its own. When you ask for more than a gate allows, the coach says no and tells you what would unlock it.
+```
+/plan tomorrow      → the planned sessions, straight from the Intervals calendar
+/status             → training load, last night's sleep/HRV/resting HR, ride weather
+/feedback           → log feel, RPE and notes on a workout
+```
 
-At 08:00 a "Check-in" post asks how you feel and, after a run, how your legs are: one tap each, and the 10:00 brief uses it.
+These answer in about a second, because the Worker reads Intervals itself.
 
-The coach plans rides indoors or outdoors from the forecast, and when the forecast for a planned ride changes, a "Weather" post appears and the coach switches it (only Z2 rides go outdoors, Fri–Sun or in a "Home week").
+### Feedback after every workout
+
+- **Feel buttons:** within 15 minutes of a workout syncing, a post asks how it felt. One tap (Strong … Weak) saves it on the activity in Intervals.
+- **📝 RPE + note:** opens a pop-up for effort and notes. Sending it starts an automatic analysis of the workout: the coach compares how it felt with what the HR and power data show and replies about a minute later.
+- **🦵 Pain button** under runs, for reporting where it hurts and how badly. A pain report holds back run progression for 14 days.
+- **Trend warning:** when three of the last five sessions went badly, the coach says so and proposes a change or asks what's going on.
+- Notes are stored as comments under the activity, never in its description, because Intervals pushes descriptions to Strava, where they can be public.
+
+### Daily and weekly posts
+
+| When | Post |
+|---|---|
+| 08:00 | **Check-in:** how do I feel, and after a run, how are the legs? One tap each. |
+| 10:00 | **Morning brief:** today's session plus readiness → GO / ADJUST / SKIP. |
+| 19:05 | **Plan check:** warns when the next 14 days break a training rule. |
+| 20:35 | **Activity check:** catches workouts that didn't get feedback yet (silent when there's nothing). |
+| Thu 19:45 | **Weekend outlook:** the ride plan for Fri–Sun with the outdoor windows. |
+| Sun 19:40 | **Weekly review:** the week vs the plan, plus a proposal for next week (stays pinned). |
+
+The channel cleans itself up: messages older than 24 h are deleted, pinned ones stay.
+
+### Weather-aware rides
+
+The bot checks the forecast (Open-Meteo) twice a day. An easy ride goes outdoors only when there's a dry daylight window long enough for it, it's not too cold and the wind is below a threshold. When the forecast for a planned ride flips, a "Weather" post appears and the coach moves the ride indoors or outdoors by itself. A 📌 in a ride's name means "don't touch it".
+
+### Safety rules in code, not in the prompt
+
+The Worker works out the important decisions in plain TypeScript and hands them to the coach as facts it has to follow:
+
+- **Run/walk ladder:** I'm rebuilding running in levels (e.g. 45 s run / 90 s walk). The next run may only step up after two "clean" sessions in a row (HR under the cap, no pain, legs fine the next morning).
+- **Plan check:** no runs on back-to-back days, no session more than 10% longer than the longest of the last 30 days, runs and rides only on their allowed days.
+- **Training history:** every coach run gets a summary of how fresh the data is, plan vs actual for the last 7 days, HRV and resting HR against their normal range, and recent notes.
+
+When I ask for more than a rule allows ("make Thursday's run longer"), the coach says no and explains what would unlock it.
+
+### Private by design
+
+- Only my Discord account can use the bot, and every request is signature-checked.
+- Buttons work once, only for me, and expire after 24 h.
+- A watchdog posts a warning with a link to the cloud session if the coach hasn't answered after 10 minutes, and a failing background job posts a ⚠️ once.
 
 ## How it works
 
