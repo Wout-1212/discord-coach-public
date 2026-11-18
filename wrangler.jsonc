@@ -1,0 +1,55 @@
+{
+  // Cloudflare Worker config — https://developers.cloudflare.com/workers/wrangler/configuration/
+  "name": "discord-coach",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+
+  // Non-secret settings. Fill these in before `npm run deploy`.
+  // Secrets (DISCORD_BOT_TOKEN, CLAUDE_TASK_TOKEN) are NOT set here:
+  // use `npx wrangler secret put <NAME>` (see README step 4).
+  "vars": {
+    // Discord Developer Portal → your app → General Information
+    "DISCORD_APPLICATION_ID": "YOUR_APPLICATION_ID",
+    "DISCORD_PUBLIC_KEY": "YOUR_PUBLIC_KEY",
+    // Your own Discord user ID (Developer Mode → right-click yourself → Copy User ID)
+    "ALLOWED_USER_ID": "YOUR_DISCORD_USER_ID",
+    // Your "Discord coach" scheduled task: the trig_… part of its Fire URL (README step 3.2)
+    "CLAUDE_TASK_ID": "trig_YOUR_TASK_ID",
+    // How many earlier channel messages Claude gets as context
+    "HISTORY_LIMIT": "20",
+    // #coach channel ID (Developer Mode → right-click the channel → Copy Channel ID).
+    // Messages older than DELETE_AFTER_HOURS are deleted every hour; pinned ones are kept.
+    // Leave the placeholder to turn cleanup off.
+    "COACH_CHANNEL_ID": "YOUR_CHANNEL_ID",
+    "DELETE_AFTER_HOURS": "24",
+    // Intervals.icu athlete ID, for /feedback, /plan, /status and nudges. The API key is a secret:
+    // `npx wrangler secret put INTERVALS_API_KEY`.
+    "INTERVALS_ATHLETE_ID": "iYOUR_ATHLETE_ID",
+    // Warn under a /coach request when no answer was posted after this many minutes.
+    "WATCHDOG_MINUTES": "10",
+    // Ride weather (Open-Meteo, no key): where rides start and the outdoor rule.
+    // An outdoor day needs a dry daylight window of OUTDOOR_MIN_HOURS (or the ride's length),
+    // feels-like ≥ OUTDOOR_MIN_FEELS_C and wind < OUTDOOR_MAX_WIND_KMH.
+    "WEATHER_LAT": "50.85",
+    "WEATHER_LON": "4.35",
+    "OUTDOOR_MIN_FEELS_C": "5",
+    "OUTDOOR_MAX_WIND_KMH": "30",
+    "OUTDOOR_MIN_HOURS": "3",
+    // Days an indoor Z2 ride may switch to outdoors (interval rides never do). Other days
+    // only when a calendar note with "Home week" in its name covers them.
+    // Internship phase: change to "sat,sun".
+    "OUTDOOR_DAYS": "fri,sat,sun",
+    // Run/walk ladder gate (src/ladder.ts): a session is only "clean" when the HR of its run
+    // segments stays at or under this cap. 149 = top of run Z1; the run zones are provisional.
+    "RUN_HR_CAP": "149"
+  },
+
+  // Pending coach runs (watchdog), nudged activities, button locks.
+  // Created with `npx wrangler kv namespace create discord-coach-state`.
+  "kv_namespaces": [{ "binding": "STATE", "id": "YOUR_KV_NAMESPACE_ID" }],
+
+  // Every 5 minutes: watchdog; every 15: activity nudges; at the top of the hour: cleanup;
+  // 06:30 and 19:00 Brussels: ride weather check.
+  "triggers": { "crons": ["*/5 * * * *"] }
+}

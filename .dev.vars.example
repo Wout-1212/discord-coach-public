@@ -1,0 +1,14 @@
+# Copy to .dev.vars (never commit .dev.vars).
+# Used by `npm run register` (registers /coach, /feedback, /plan, /report and /status), `npm run webhook` and `npm run dev`.
+
+DISCORD_APPLICATION_ID=
+DISCORD_BOT_TOKEN=
+# Your private server's ID (Developer Mode → right-click the server icon → Copy Server ID)
+DISCORD_GUILD_ID=
+# #coach channel ID, for `npm run webhook` (same as COACH_CHANNEL_ID in wrangler.jsonc)
+COACH_CHANNEL_ID=
+
+# Only needed for `npm run dev` (local testing)
+CLAUDE_TASK_TOKEN=
+INTERVALS_API_KEY=
+DISCORD_WEBHOOK_URL=
