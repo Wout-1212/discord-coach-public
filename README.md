@@ -1,183 +1,53 @@
 # Discord coach
 
-> A small personal project, vibe-coded with [Claude Code](https://claude.com/claude-code): my own AI training coach for cycling, running and strength, which I talk to from Discord on my phone.
+> A small personal project, vibe-coded with [Claude Code](https://claude.com/claude-code): a Discord bot that connects me to [Intervals.icu](https://intervals.icu), the training tool where my workouts and training calendar live, with an AI coach in between.
 
-**What it is:** a Cloudflare Worker (TypeScript) that turns Discord slash commands and buttons into runs of a Claude scheduled task. The task reads my training data and calendar from [Intervals.icu](https://intervals.icu), answers in the channel, and changes the calendar only after I tap ✅ Confirm. Next to that, the Worker posts on a schedule: workout feedback prompts, a morning check-in, weather-based indoor/outdoor switches and plan checks.
-
-**What I found interesting to build:**
-- **The model explains, code decides.** Safety rules (when a run may get harder, the +10% volume rule, run days) are worked out in plain TypeScript ([src/ladder.ts](src/ladder.ts), [src/plan-check.ts](src/plan-check.ts)), and the coach is told to follow them, not to work them out itself.
-- **Memory in git.** The coach keeps its own memory in a Markdown file and commits changes to it, so every change shows up as a diff I can review or revert. An append-only decision log records why the plan changed and whether that worked out.
-- **Human in the loop.** Calendar writes only happen after a one-time, owner-only, 24 h confirm button.
-- **No servers to run.** Discord interactions, cron jobs and KV state all run on Cloudflare's free tier, and the AI part runs on a Claude subscription.
-
-**Stack:** Cloudflare Workers + KV · TypeScript · Discord interactions API (Ed25519 signature checks, buttons, modals) · Claude Code scheduled tasks · Intervals.icu API · Open-Meteo · GitHub Actions (typecheck, ~20 test files with Node's built-in runner, auto-deploy).
-
-> **Note:** the files in [coach/](coach/) are made-up examples. The real coach memory contains personal health data and lives in a private repo. All IDs in `wrangler.jsonc` are placeholders.
-
----
+I use it from my phone in a private Discord channel to ask about my training, log how workouts felt and change my plan, for cycling, running and strength.
 
 ## Features
 
-[Intervals.icu](https://intervals.icu) is where my workouts sync (Garmin, Zwift, Wahoo) and where my training calendar lives. This bot lets me use it from a private Discord channel on my phone, with an AI coach in between.
-
-### Talk to the coach
-
-```
-/coach analyse today's ride
-/coach move Friday's ride to Saturday     → Coach proposes → tap ✅ Confirm → done
-/coach I'm home next week                 → Coach updates its memory: "📌 Saved: …"
-/coach chart my CTL for the last 3 months → the chart as an image
-/report type:Weekly                       → a weekly / season / wellness report, long ones as a file
-```
-
-- **Ask anything in plain language**, in English or Dutch: how a workout went, whether I'm tired, what to do this week. The coach pulls live data from Intervals before it answers.
-- **Calendar changes with a confirm button.** The coach proposes a concrete change ("move the Z2 ride to Saturday, 1h30 indoors"). It only writes to the calendar after I tap ✅ Confirm, and the change then shows up on Zwift, Wahoo and Garmin automatically.
-- **It remembers.** When my situation changes (a home week, a new goal, an injury), the coach updates its own memory file and commits it to git. Every run reads that file, so a follow-up a week later still has the context.
-- **Charts and reports.** It draws charts (fitness, HR trends) as images and posts longer reports as files.
-
-### Quick answers, no AI needed
-
-```
-/plan tomorrow      → the planned sessions, straight from the Intervals calendar
-/status             → training load, last night's sleep/HRV/resting HR, ride weather
-/feedback           → log feel, RPE and notes on a workout
-```
-
-These answer in about a second, because the Worker reads Intervals itself.
-
-### Feedback after every workout
-
-- **Feel buttons:** within 15 minutes of a workout syncing, a post asks how it felt. One tap (Strong … Weak) saves it on the activity in Intervals.
-- **📝 RPE + note:** opens a pop-up for effort and notes. Sending it starts an automatic analysis of the workout: the coach compares how it felt with what the HR and power data show and replies about a minute later.
-- **🦵 Pain button** under runs, for reporting where it hurts and how badly. A pain report holds back run progression for 14 days.
-- **Trend warning:** when three of the last five sessions went badly, the coach says so and proposes a change or asks what's going on.
-- Notes are stored as comments under the activity, never in its description, because Intervals pushes descriptions to Strava, where they can be public.
-
-### Daily and weekly posts
-
-| When | Post |
-|---|---|
-| 08:00 | **Check-in:** how do I feel, and after a run, how are the legs? One tap each. |
-| 10:00 | **Morning brief:** today's session plus readiness → GO / ADJUST / SKIP. |
-| 19:05 | **Plan check:** warns when the next 14 days break a training rule. |
-| 20:35 | **Activity check:** catches workouts that didn't get feedback yet (silent when there's nothing). |
-| Thu 19:45 | **Weekend outlook:** the ride plan for Fri–Sun with the outdoor windows. |
-| Sun 19:40 | **Weekly review:** the week vs the plan, plus a proposal for next week (stays pinned). |
-
-The channel cleans itself up: messages older than 24 h are deleted, pinned ones stay.
-
-### Weather-aware rides
-
-The bot checks the forecast (Open-Meteo) twice a day. An easy ride goes outdoors only when there's a dry daylight window long enough for it, it's not too cold and the wind is below a threshold. When the forecast for a planned ride flips, a "Weather" post appears and the coach moves the ride indoors or outdoors by itself. A 📌 in a ride's name means "don't touch it".
-
-### Safety rules in code, not in the prompt
-
-The Worker works out the important decisions in plain TypeScript and hands them to the coach as facts it has to follow:
-
-- **Run/walk ladder:** I'm rebuilding running in levels (e.g. 45 s run / 90 s walk). The next run may only step up after two "clean" sessions in a row (HR under the cap, no pain, legs fine the next morning).
-- **Plan check:** no runs on back-to-back days, no session more than 10% longer than the longest of the last 30 days, runs and rides only on their allowed days.
-- **Training history:** every coach run gets a summary of how fresh the data is, plan vs actual for the last 7 days, HRV and resting HR against their normal range, and recent notes.
-
-When I ask for more than a rule allows ("make Thursday's run longer"), the coach says no and explains what would unlock it.
-
-### Private by design
-
-- Only my Discord account can use the bot, and every request is signature-checked.
-- Buttons work once, only for me, and expire after 24 h.
-- A watchdog posts a warning with a link to the cloud session if the coach hasn't answered after 10 minutes, and a failing background job posts a ⚠️ once.
+- **Ask the coach anything:** `/coach analyse today's ride` or `/coach move Friday's ride to Saturday`. It reads live data from Intervals before it answers, in English or Dutch.
+- **Calendar changes behind a ✅ Confirm button.** The coach proposes, and only writes after I tap. The change then syncs to Zwift, Wahoo and Garmin.
+- **It remembers:** when my situation changes, the coach updates its own memory file and commits it to git.
+- **Instant commands:** `/plan` (upcoming sessions), `/status` (load, sleep, HRV, weather) and `/feedback`, answered by the Worker itself, with no AI involved.
+- **Feedback after every workout:** one-tap "how did it feel?" buttons, a notes pop-up that starts an automatic analysis, and a pain button under runs.
+- **Daily and weekly posts:** a morning check-in and brief, an evening plan check, a weekend outlook and a weekly review.
+- **Weather-aware rides:** easy rides move between indoors and outdoors when the forecast changes.
+- **Charts and reports** as images and files.
 
 ## How it works
 
 ```
-Discord  /coach <message>
+Discord  (/coach, buttons, pop-ups)
    │
    ▼
-Cloudflare Worker (this repo, free, always on)
-   1. checks Discord's signature and that the sender is you
-   2. replies instantly with your question + "Coach is on it"
-   3. reads the last ~20 channel messages (context for follow-ups)
-   4. starts the "Discord coach" scheduled task via its API trigger
-   5. adds the cloud session link under your question
+Cloudflare Worker  (TypeScript, free tier)
+   - checks Discord's signature and that it's me
+   - answers /plan, /status, /feedback straight from Intervals
+   - works out the training rules and a training summary
+   - cron: workout prompts, check-in, weather and plan checks, cleanup
    │
    ▼
-Claude scheduled task (Anthropic cloud, your Pro subscription)
-   - Montis connector (Intervals data + calendar), context doc from this repo, skills
-   - answers, or proposes a calendar change with ✅ Confirm / Cancel buttons and
-     only writes after ✅ (or "/coach yes")
-   - when your situation changes, updates coach/training-coach-context.md and
-     pushes it to main (its memory; no deploy needed, the next run reads it)
-   - notes why the plan changed in coach/decision-log.md, and how that worked out
-   - posts the answer to the channel with `discord-post` (webhook), with charts or
-     long reports attached
-
-✅ Confirm  → the Worker starts the task again with that exact proposal quoted.
-Cancel      → marked cancelled, nothing runs.
-
-Discord  /feedback feel rpe notes [activity]
-   → the Worker saves it on the activity in Intervals (feel and RPE in their fields,
-     notes as a message under the activity: never in the description, which Intervals
-     pushes to Strava) right away. For an activity from today or yesterday it then starts
-     the coach's analysis of it ("Automated activity analysis", cloud/routines/).
-
-📝 pop-up under an "Intervals" post
-   → saved the same way, then the same analysis. Once per activity (KV); a 🦵 pain
-     report after it starts one "pain follow-up". A feel tap alone starts nothing.
-
-Discord  /plan [day]
-   → the Worker reads the Intervals calendar and answers in a second; no Claude run.
-
-Discord  /status
-   → the Worker reads Intervals wellness + the forecast and answers in a second; no Claude run.
-
-Discord  /report type
-   → a /coach run with a fixed request: the matching Montis report.
-
-Cron (every 5 min, Worker)
-   - watchdog: no Coach answer 10 min after a /coach → ⚠️ warning with the session link
-   - every 15 min, 07:00–22:00: new activity without feedback → "Intervals" post
-     with feel buttons (Strong … Weak) and a note pop-up; both save on the activity
-   - every hour: delete #coach messages older than 24 h (pinned ones are kept)
-   - 08:00: "Check-in" post (feel → Intervals wellness fatigue; legs after a run → a
-     "Next morning" message on that run, read by the ladder gate)
-   - 19:05: plan check of the next 14 days; a "⚠️ Plan check" post for each new problem
-   - scheduled tasks: morning brief (10:00, after your watch has synced), activity check
-     (20:35, only for activities of today and yesterday that got no analysis after feedback, and silent when there's nothing to report), weekend outlook (Thu 19:45), weekly review (Sun 19:40, stays pinned).
-     The Worker starts the coach with "Automated <task>"; the instructions are in
-     cloud/routines/ and the answer is posted in #coach like any other.
-   - 06:30 and 19:00: ride weather check. Planned rides of the next 3 days vs the
-     Open-Meteo forecast; when one flips (outdoor ↔ indoor) → "Weather" post + a coach
-     run that switches it right away (no ✅ needed). Silent when nothing changed.
-   - a background job that fails: a ⚠️ "System" post, once until it works again (weather
-     check and scheduled tasks right away, the others after 3 failures in a row).
-
-Ride weather (Worker, Open-Meteo, free, no key)
-   - every coach run gets a 7-day block: per day ✅ outdoor with its window, or 🏠
-     indoor with the reason. The outdoor rule (feels-like, wind, dry window, location)
-     is set in wrangler.jsonc vars.
+Claude scheduled task
+   - reads Intervals data + calendar and the coach memory
+   - posts the answer in Discord; writes to the calendar only after ✅
+   - commits memory updates and a decision log to the repo
 ```
 
-| Part | Where | File |
-|---|---|---|
-| Worker | Cloudflare | `src/` |
-| Slash commands | Discord | `scripts/register-commands.mjs` |
-| App-owned webhook (needed for buttons) | Discord | `scripts/create-webhook.mjs` |
-| Worker state (pending runs, nudged activities, weather flags) | Cloudflare KV `STATE` | `wrangler.jsonc` |
-| Scheduled tasks (morning brief, activity check, weekend outlook, weekly review) | Worker cron → coach task | `src/scheduled.ts` (times), `cloud/routines/` (instructions) |
-| Outdoor rule + ride location | Worker vars | `wrangler.jsonc` (`OUTDOOR_*`, `WEATHER_*`) |
-| Tests + auto-deploy | GitHub Actions | `.github/workflows/ci.yml` |
-| Task prompt | this repo (the routine's saved prompt only points to it) | `cloud/coach-task-prompt.md`, saved stub: `cloud/routine-prompt.md` |
-| Coach memory (the only copy; the coach commits to it) | this repo | `coach/training-coach-context.md` |
-| Decision log (append-only; the coach commits to it) | this repo | `coach/decision-log.md` |
-| Training history block (read from Intervals on every run, not stored) | Worker | `src/history.ts` |
-| `discord-post` helper + matplotlib | cloud environment setup script | `cloud/setup-script.sh` (generated from `cloud/discord-post` by `npm run setup-script`) |
+**What I found interesting to build:**
+- **The model explains, code decides.** Safety rules (when a run may get harder, the +10% volume rule, run days) live in plain TypeScript ([src/ladder.ts](src/ladder.ts), [src/plan-check.ts](src/plan-check.ts)). The coach gets the outcome as a fact to follow.
+- **Memory in git.** Every change to the coach's memory is a commit I can review or revert.
+- **Human in the loop.** Confirm buttons work once, only for me, and expire after 24 h.
+- **No servers to run.** Everything runs on Cloudflare's free tier plus a Claude subscription.
 
-**Limits:** every message starts a new cloud session (about 20 s to 1.5 min per answer; answers arrive whole, not word by word). A follow-up only sees the last ~20 channel messages + the context doc, and each message uses your Claude usage. The API trigger is a research preview and may change.
+**Stack:** Cloudflare Workers + KV · TypeScript · Discord interactions API · Claude Code scheduled tasks · Intervals.icu API · Open-Meteo · GitHub Actions (typecheck, tests, auto-deploy).
 
-The coach commits to `main`, so run `git pull` before working locally.
+> **Note:** the files in [coach/](coach/) are made-up examples. The real coach memory contains personal health data and lives in a private repo. All IDs in `wrangler.jsonc` are placeholders.
 
----
+## Run it yourself
 
-## Setup (about 45–60 minutes)
+<details>
+<summary><b>Setup</b> (about 45–60 minutes)</summary>
 
 You need: Node 22+, a free [Cloudflare account](https://dash.cloudflare.com/sign-up), and Discord.
 
@@ -302,9 +172,10 @@ In `#coach`:
 7. `/coach remember my new bike computer is a Wahoo Bolt` → "📌 Saved: …", and a commit on `main` that only touches `coach/training-coach-context.md`. Then `/coach forget that`.
 8. `/coach chart my CTL for the last 3 months` → an image. `/report type:Weekly` → the report.
 
----
+</details>
 
-## Troubleshooting
+<details>
+<summary><b>Troubleshooting</b></summary>
 
 | Symptom | Cause / fix |
 |---|---|
@@ -324,15 +195,14 @@ In `#coach`:
 
 Live logs: `npm run tail`.
 
+</details>
+
 ## Security
 
-- Only requests signed by Discord are accepted, and only from your user ID.
-- Secrets (`DISCORD_BOT_TOKEN`, `CLAUDE_TASK_TOKEN`, `INTERVALS_API_KEY`, `DISCORD_WEBHOOK_URL`) live in Cloudflare's secret store, not in the code. `.dev.vars` is git-ignored. The Intervals key gives full access to your Intervals account; the Worker only uses it to read activities, the calendar and wellness, to set feel, RPE and the morning-check fatigue, and to add messages under activities (your notes). It never writes descriptions: Intervals pushes those to Strava, where they can be public.
-- The task token can only start this one task. It can't read your account.
-- Calendar writes happen only after an explicit ✅ Confirm or `/coach yes` on a concrete proposal. Buttons only work for your user ID, only once, and only for 24 h.
-- The coach can push to this repo. The prompt limits it to `coach/training-coach-context.md` and `coach/decision-log.md`, but that's an instruction, not an enforced permission. Every change is a commit you can see and revert.
-- The webhook URL lets anyone who has it post in `#coach` (not read). It's in the cloud environment and in Cloudflare's secret store.
-- If a token leaks: regenerate it (Discord: Reset Token; Claude: Generate token on the API trigger) and run `wrangler secret put` again.
+- Only requests signed by Discord, from my user ID, are accepted.
+- Secrets live in Cloudflare's secret store, not in the code. `.dev.vars` is git-ignored.
+- The coach can push to its own repo. The prompt limits it to the two files in `coach/`, and every change is a commit that can be reverted.
+- The Worker never writes activity descriptions, because Intervals pushes those to Strava, where they can be public.
 
 ## Development
 
@@ -342,6 +212,4 @@ npm run typecheck
 npm run dev       # local Worker on http://localhost:8787 (needs .dev.vars)
 ```
 
-After editing `cloud/discord-post`, run `npm run setup-script` and paste `cloud/setup-script.sh` into the environment again. Its tests need `python3`: they're skipped where it's missing and run in CI.
-
-GitHub Actions (`.github/workflows/ci.yml`) runs the typecheck and tests on every push, and deploys `main` when the repository secrets `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers") and `CLOUDFLARE_ACCOUNT_ID` are set. Without them it only tests.
+CI runs the typecheck and tests on every push, and deploys `main` when the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets are set.
